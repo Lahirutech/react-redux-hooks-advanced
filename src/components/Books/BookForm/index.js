@@ -1,46 +1,187 @@
-import React,{useState} from 'react'
+import React, { useState, useEffect } from 'react';
+import { connect } from 'react-redux';
+import { loadGenres } from '../../../redux/actions/genreActions';
+import { useModal } from '../../hooks/useModal';
+import { InputText } from '../../common/InputText';
+import { Summary } from '../Summary';
+import { InputSelect } from '../../common/InputSelect';
+import { Modal } from "../../common/Modal";
+import { loadBooks, saveBook } from '../../../redux/actions/bookActions';
 
-const _BookForm=()=>{
+const newBook = {
+  id: null,
+  title: "",
+  summary: "",
+  author: "",
+  language: "",
+  genreId: null,
+  url: ""
+};
 
-const [book,setBook]= useState({})
+const _BookForm = ({  books,
+  genres,
+  loadBooks,
+  saveBook,
+  loadGenres,
+  history,
+  ...props}) => {
+  const [book, setBook] = useState({});
+  const [errors, setErrors] = useState({});
+  const [saving, setSaving] = useState(false);
+  const { isOpen: showSummary, toggle: toggleSummary } = useModal();
 
-const handleChange=(event)=>{
-  const {name,value}=event.target;
-  setBook(prevBook=>({
-    ...prevBook,
-    [name]:value
-  }))
+  useEffect(() => {
+    if (books.length === 0) {
+      loadBooks().catch(error => {
+        console.log("Loading books failed. ", error);
+      });
+    } else {
+      setBook({ ...props.book })
+    }
+  }, [props.book]);
 
-}
-const handleSubmit=(e)=>{
-  e.preventDefault();
-}
+  const formIsValid = () => {
+    const formErrors = {};
+    const { title, author, genreId } = book;
 
+    if (!title) formErrors.title = "Title is required.";
+    if (!author) formErrors.author = "Author is required";
+    if (!genreId) formErrors.genreId = "Genre is required";
 
+    setErrors({ ...formErrors});
 
-  return(
+    return Object.keys(formErrors).length === 0;
+  }
+
+  const handleChange = (event) => {
+    const { name, value } = event.target;
+    setBook(prevBook => ({
+      ...prevBook,
+      [name]: name === "genreId" ? parseInt(value) : value
+    }));
+  }
+
+  const handleSummary = (value) => {
+    setBook(prevBook => ({
+      ...prevBook,
+      summary: value
+    }))
+  }
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!formIsValid()) return;
+    setSaving(true);
+    saveBook(book)
+      .then(() => {
+        history.push("/");
+      })
+      .catch(error => {
+        setSaving(false);
+        setErrors({ onSave: error.message });
+      });
+  }
+
+  return (
     <div>
-    <form onSubmit={handleSubmit}>
-    <div className="form-group">
-        <label htmlFor="title" className="col col-form-label">Book Title</label>
-        <div className="col-sm-12">
-          <input type="text" className='form-control' id='title' name='title' value={book.title} onChange={handleChange} placeholder="Enter the title" />
+      <form onSubmit={handleSubmit}>
+      <InputText 
+        id="title"
+        name="title"
+        title="Book Title"
+        value={book.title}
+        handleChange={handleChange}
+        placeHolder="Book Title"
+        error={errors.title}
+        />
+      <div className="form-group row m-0">
+        <div className="col-sm-6 mb-3 mb-sm-0">
+          <button type="button" className="btn btn-light w-100" onClick={toggleSummary}>
+            {book.summary  ? <span>Edit Summary</span> : <span>Add Summary</span>}
+          </button>
+          <Modal isOpen={showSummary} toggle={toggleSummary}>
+            <Summary 
+              toggleSummary={toggleSummary}
+              showSummary={showSummary}
+              id="summary"
+              name="summary"
+              value={book.summary}
+              handleSummary={handleSummary} />
+          </Modal>
         </div>
       </div>
-      <div className="form-group">
-        <label htmlFor="author" className="col col-form-label">Book Author</label>
-        <div className="col-sm-12">
-          <input type="text" className='form-control' id='author' name='author' value={book.author} onChange={handleChange} placeholder="Author name" />
-        </div>
-      </div>
+      <InputSelect
+        id="genre"
+        name="genreId"
+        label="Genre"
+        value={book.genreId}
+        defaultOption="Select Genre"
+        handleChange={handleChange}
+        error={errors.genreId}
+        options={[]}
+      />
+      <InputText 
+        id="author"
+        name="author"
+        title="Author Name"
+        value={book.author}
+        handleChange={handleChange}
+        placeHolder="Author Name"
+        error={errors.author}
+        />
+      <InputText 
+        id="language"
+        name="language"
+        title="Language"
+        value={book.language}
+        handleChange={handleChange}
+        placeHolder="English"
+        error={errors.language}
+        />
+      <InputText 
+        id="url"
+        name="url"
+        title="Link to buy"
+        value={book.url}
+        handleChange={handleChange}
+        placeHolder="https://example.com"
+        error={errors.url}
+        />
       <div className="form-group row m-0 mt-4">
         <div className="col-sm-6">
-          <button type="submit" className="btn btn-primary w-100" >Save</button>
+          <button type="submit" className="btn btn-primary w-100" disabled={saving}>{saving ? "Saving..." : "Save"}</button>
         </div>
       </div>
-    </form>
+    </form>      
     </div>
-  )
+  );
+
+
 }
 
-export const BookForm=_BookForm;
+export const getBookBySlug = (books, slug) => {
+  return books.find(book => book.slug === slug) || null;
+}
+
+const mapStateToProps = (state, ownProps) => {
+  const slug = ownProps.match.params.slug;
+  const book =
+    slug && state.books.length > 0
+      ? getBookBySlug(state.books, slug)
+      : newBook;
+
+      return {
+    book: book || {},
+    books: state.books || [],
+    genres: state.genres || []
+  };
+}
+
+const mapDispatchToProps = {
+  loadBooks,
+  saveBook,
+  loadGenres
+};
+
+
+export const BookForm =  _BookForm;
